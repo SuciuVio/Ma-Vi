@@ -41,6 +41,20 @@ jobs:
         working-directory: mobile_flutter
         run: flutter create . --platforms=android --org ro.mavi --project-name mavi_mobile
 
+      - name: Install Android API 36
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
+
+      - name: Use Android API 36 for compile SDK
+        working-directory: mobile_flutter
+        run: |
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' android/app/build.gradle
+          fi
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts
+          fi
+
       - name: Install Flutter dependencies
         working-directory: mobile_flutter
         run: flutter pub get
