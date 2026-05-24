@@ -56,6 +56,32 @@ class ContactRequest(BaseModel):
     nickname: str | None = None
 
 
+class CallStartRequest(BaseModel):
+    """Start call payload."""
+
+    callee_id: int
+
+
+class CallRespondRequest(BaseModel):
+    """Answer or reject call payload."""
+
+    call_id: int
+    accepted: bool
+
+
+class CallEndRequest(BaseModel):
+    """End call payload."""
+
+    call_id: int
+
+
+class CallMuteRequest(BaseModel):
+    """Mute call payload."""
+
+    call_id: int
+    muted: bool
+
+
 def _bearer_token(authorization: str | None) -> str:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
@@ -327,6 +353,82 @@ def download_attachment(attachment_id: int, user: dict[str, Any] = Depends(curre
     if not path.exists():
         raise HTTPException(status_code=404, detail="File missing")
     return FileResponse(path, filename=str(row["file_name"]), media_type=str(row["content_type"]))
+
+
+@app.post("/api/calls/start")
+async def start_call(payload: CallStartRequest, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+    """Start an audio call signaling session."""
+    with session() as db:
+        callee = db.execute("SELECT * FROM users WHERE id = ?", (payload.callee_id,)).fetchone()
+        if not callee:
+            raise HTTPException(status_code=404, detail="User not found")
+        cursor = db.execute(
+            """
+            INSERT INTO calls (caller_id, callee_id, status)
+            VALUES (?, ?, 'ringing')
+            """,
+            (user["id"], payload.callee_id),
+        )
+        call = row_to_dict(db.execute("SELECT * FROM calls WHERE id = ?", (int(cursor.lastrowid),)).fetchone())
+    await broadcast(payload.callee_id, {"event": "call_started", "call": call, "caller": user_public(user)})
+    return {"call": call}
+
+
+@app.post("/api/calls/respond")
+async def respond_call(payload: CallRespondRequest, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+    """Accept or reject an incoming call."""
+    status = "active" if payload.accepted else "rejected"
+    with session() as db:
+        call = db.execute("SELECT * FROM calls WHERE id = ? AND callee_id = ?", (payload.call_id, user["id"])).fetchone()
+        if not call:
+            raise HTTPException(status_code=404, detail="Call not found")
+        db.execute(
+            """
+            UPDATE calls
+            SET status = ?, answered_at = CASE WHEN ? = 'active' THEN CURRENT_TIMESTAMP ELSE answered_at END,
+                ended_at = CASE WHEN ? = 'rejected' THEN CURRENT_TIMESTAMP ELSE ended_at END
+            WHERE id = ?
+            """,
+            (status, status, status, payload.call_id),
+        )
+        updated = row_to_dict(db.execute("SELECT * FROM calls WHERE id = ?", (payload.call_id,)).fetchone())
+    await broadcast(int(call["caller_id"]), {"event": "call_answered" if payload.accepted else "call_rejected", "call": updated})
+    return {"call": updated}
+
+
+@app.post("/api/calls/end")
+async def end_call(payload: CallEndRequest, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+    """End an active or ringing call."""
+    with session() as db:
+        call = db.execute(
+            "SELECT * FROM calls WHERE id = ? AND (caller_id = ? OR callee_id = ?)",
+            (payload.call_id, user["id"], user["id"]),
+        ).fetchone()
+        if not call:
+            raise HTTPException(status_code=404, detail="Call not found")
+        db.execute("UPDATE calls SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = ?", (payload.call_id,))
+        updated = row_to_dict(db.execute("SELECT * FROM calls WHERE id = ?", (payload.call_id,)).fetchone())
+    other_id = int(call["callee_id"] if int(call["caller_id"]) == int(user["id"]) else call["caller_id"])
+    await broadcast(other_id, {"event": "call_ended", "call": updated})
+    return {"call": updated}
+
+
+@app.post("/api/calls/mute")
+async def mute_call(payload: CallMuteRequest, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
+    """Update mute state for one participant."""
+    with session() as db:
+        call = db.execute(
+            "SELECT * FROM calls WHERE id = ? AND (caller_id = ? OR callee_id = ?)",
+            (payload.call_id, user["id"], user["id"]),
+        ).fetchone()
+        if not call:
+            raise HTTPException(status_code=404, detail="Call not found")
+        column = "muted_by_caller" if int(call["caller_id"]) == int(user["id"]) else "muted_by_callee"
+        db.execute(f"UPDATE calls SET {column} = ? WHERE id = ?", (1 if payload.muted else 0, payload.call_id))
+        updated = row_to_dict(db.execute("SELECT * FROM calls WHERE id = ?", (payload.call_id,)).fetchone())
+    other_id = int(call["callee_id"] if int(call["caller_id"]) == int(user["id"]) else call["caller_id"])
+    await broadcast(other_id, {"event": "call_muted", "call": updated})
+    return {"call": updated}
 
 
 @app.websocket("/ws/chat")

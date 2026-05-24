@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../api/mavi_api.dart';
 import '../models.dart';
@@ -20,21 +22,43 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _api = MaviApi();
   final _message = TextEditingController();
+  WebSocketChannel? _socket;
   List<MaviMessage> _messages = [];
   String _status = '';
+  int? _callId;
+  bool _callMuted = false;
+  String _callStatus = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+    _connectRealtime();
+  }
+
+  @override
+  void dispose() {
+    _socket?.sink.close();
+    _message.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.peer.username)),
+      appBar: AppBar(
+        title: Text(widget.peer.username),
+        actions: [
+          IconButton(
+            tooltip: 'Audio call',
+            onPressed: _callId == null ? _startCall : null,
+            icon: const Icon(Icons.call),
+          ),
+        ],
+      ),
       body: Column(
         children: [
+          if (_callId != null) _CallBanner(status: _callStatus, muted: _callMuted, onEnd: _endCall, onMute: _toggleMute),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
@@ -78,6 +102,38 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _messages = messages);
   }
 
+  void _connectRealtime() {
+    final uri = _api.wsUri('/ws/chat', {'token': widget.token});
+    final socket = WebSocketChannel.connect(uri);
+    _socket = socket;
+    socket.stream.listen((payload) {
+      if (!mounted) return;
+      final data = jsonDecode(payload as String) as Map<String, dynamic>;
+      final event = data['event'] as String? ?? '';
+      if (event == 'message') {
+        final message = MaviMessage.fromJson(data['message'] as Map<String, dynamic>);
+        if (message.senderId == widget.peer.id || message.receiverId == widget.peer.id) {
+          setState(() => _messages = [..._messages, message]);
+        }
+      } else if (event == 'call_started') {
+        final call = data['call'] as Map<String, dynamic>;
+        if (call['caller_id'] == widget.peer.id) {
+          _showIncomingCall(call);
+        }
+      } else if (event == 'call_answered') {
+        setState(() {
+          _callStatus = 'Audio call active';
+        });
+      } else if (event == 'call_rejected' || event == 'call_ended') {
+        _clearCall(event == 'call_rejected' ? 'Call rejected' : 'Call ended');
+      } else if (event == 'call_muted') {
+        setState(() => _callStatus = 'Call updated');
+      }
+    }, onError: (_) {
+      if (mounted) setState(() => _status = 'Realtime disconnected');
+    });
+  }
+
   Future<void> _send() async {
     final text = _message.text.trim();
     if (text.isEmpty) return;
@@ -116,9 +172,114 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _startCall() async {
+    setState(() => _callStatus = 'Calling ${widget.peer.username}...');
+    try {
+      final call = await _api.startCall(widget.token, widget.peer.id);
+      setState(() {
+        _callId = call['id'] as int;
+        _callStatus = 'Ringing...';
+      });
+    } catch (error) {
+      setState(() => _status = 'Call failed: $error');
+    }
+  }
+
+  Future<void> _answerCall() async {
+    final callId = _callId;
+    if (callId == null) return;
+    await _api.respondCall(widget.token, callId, true);
+    if (!mounted) return;
+    setState(() {
+      _callStatus = 'Audio call active';
+    });
+  }
+
+  Future<void> _rejectCall() async {
+    final callId = _callId;
+    if (callId == null) return;
+    await _api.respondCall(widget.token, callId, false);
+    if (!mounted) return;
+    _clearCall('Call rejected');
+  }
+
+  Future<void> _endCall() async {
+    final callId = _callId;
+    if (callId == null) return;
+    await _api.endCall(widget.token, callId);
+    if (!mounted) return;
+    _clearCall('Call ended');
+  }
+
+  Future<void> _toggleMute() async {
+    final callId = _callId;
+    if (callId == null) return;
+    final muted = !_callMuted;
+    await _api.muteCall(widget.token, callId, muted);
+    if (!mounted) return;
+    setState(() {
+      _callMuted = muted;
+      _callStatus = muted ? 'Muted' : 'Audio call active';
+    });
+  }
+
+  void _showIncomingCall(Map<String, dynamic> call) {
+    setState(() {
+      _callId = call['id'] as int;
+      _callStatus = 'Incoming audio call';
+    });
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('${widget.peer.username} is calling'),
+        content: const Text('Incoming audio call'),
+        actions: [
+          TextButton(onPressed: () { Navigator.of(context).pop(); _rejectCall(); }, child: const Text('Decline')),
+          FilledButton(onPressed: () { Navigator.of(context).pop(); _answerCall(); }, child: const Text('Answer')),
+        ],
+      ),
+    );
+  }
+
+  void _clearCall(String status) {
+    setState(() {
+      _callId = null;
+      _callMuted = false;
+      _callStatus = '';
+      _status = status;
+    });
+  }
+
   bool _isImageName(String name) {
     final lower = name.toLowerCase();
     return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.bmp');
+  }
+}
+
+class _CallBanner extends StatelessWidget {
+  const _CallBanner({required this.status, required this.muted, required this.onEnd, required this.onMute});
+
+  final String status;
+  final bool muted;
+  final VoidCallback onEnd;
+  final VoidCallback onMute;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: const Color(0xFF12352F),
+      child: Row(
+        children: [
+          const Icon(Icons.call, size: 20),
+          const SizedBox(width: 8),
+          Expanded(child: Text(status)),
+          IconButton(onPressed: onMute, icon: Icon(muted ? Icons.mic_off : Icons.mic)),
+          IconButton.filledTonal(onPressed: onEnd, icon: const Icon(Icons.call_end)),
+        ],
+      ),
+    );
   }
 }
 

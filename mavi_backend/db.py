@@ -88,6 +88,20 @@ CREATE TABLE IF NOT EXISTS attachments (
   FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS calls (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  caller_id INTEGER NOT NULL,
+  callee_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'ringing',
+  muted_by_caller INTEGER DEFAULT 0,
+  muted_by_callee INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  answered_at DATETIME,
+  ended_at DATETIME,
+  FOREIGN KEY(caller_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(callee_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);

@@ -32,6 +32,11 @@ class MaviApi {
     return Uri.parse('$baseUrl$path').replace(queryParameters: query);
   }
 
+  Uri wsUri(String path, [Map<String, String>? query]) {
+    final uri = _uri(path, query);
+    return uri.replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws');
+  }
+
   Map<String, String> _headers(String token) => {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
 
   Future<AuthSession> login(String username, String password) async {
@@ -86,6 +91,46 @@ class MaviApi {
     );
     _ensureOk(response);
     return MaviMessage.fromJson(jsonDecode(response.body)['message'] as Map<String, dynamic>);
+  }
+
+  Future<Map<String, dynamic>> startCall(String token, int calleeId) async {
+    final response = await http.post(
+      _uri('/api/calls/start'),
+      headers: _headers(token),
+      body: jsonEncode({'callee_id': calleeId}),
+    );
+    _ensureOk(response);
+    return jsonDecode(response.body)['call'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> respondCall(String token, int callId, bool accepted) async {
+    final response = await http.post(
+      _uri('/api/calls/respond'),
+      headers: _headers(token),
+      body: jsonEncode({'call_id': callId, 'accepted': accepted}),
+    );
+    _ensureOk(response);
+    return jsonDecode(response.body)['call'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> endCall(String token, int callId) async {
+    final response = await http.post(
+      _uri('/api/calls/end'),
+      headers: _headers(token),
+      body: jsonEncode({'call_id': callId}),
+    );
+    _ensureOk(response);
+    return jsonDecode(response.body)['call'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> muteCall(String token, int callId, bool muted) async {
+    final response = await http.post(
+      _uri('/api/calls/mute'),
+      headers: _headers(token),
+      body: jsonEncode({'call_id': callId, 'muted': muted}),
+    );
+    _ensureOk(response);
+    return jsonDecode(response.body)['call'] as Map<String, dynamic>;
   }
 
   Future<int> uploadAttachment(String token, File file) async {
