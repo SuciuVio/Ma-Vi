@@ -47,13 +47,15 @@ jobs:
       - name: Use Android API 36 for compile SDK
         working-directory: mobile_flutter
         run: |
-          if [ -f android/app/build.gradle ]; then
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' android/app/build.gradle
-          fi
-          if [ -f android/app/build.gradle.kts ]; then
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts
-          fi
+          for file in android/app/build.gradle android/app/build.gradle.kts; do
+            if [ -f "$file" ]; then
+              sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter\.compileSdkVersion/compileSdk = 36/g' "$file"
+              sed -i -E 's/compileSdkVersion[[:space:]]+flutter\.compileSdkVersion/compileSdkVersion 36/g' "$file"
+              sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/g' "$file"
+              sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' "$file"
+            fi
+          done
+          grep -R "compileSdk" -n android
 
       - name: Install Flutter dependencies
         working-directory: mobile_flutter
