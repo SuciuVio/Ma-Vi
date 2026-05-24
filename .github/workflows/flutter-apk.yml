@@ -55,39 +55,22 @@ jobs:
               sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' "$file"
             fi
           done
-          if [ -f android/build.gradle ]; then
-            cat >> android/build.gradle <<'EOF'
-
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.plugins.hasPlugin("com.android.application") || project.plugins.hasPlugin("com.android.library")) {
-                      project.android {
-                          compileSdkVersion 36
-                      }
-                  }
-              }
-          }
-          EOF
-          fi
-          if [ -f android/build.gradle.kts ]; then
-            cat >> android/build.gradle.kts <<'EOF'
-
-          subprojects {
-              afterEvaluate {
-                  if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
-                      extensions.configure<com.android.build.gradle.BaseExtension>("android") {
-                          compileSdkVersion(36)
-                      }
-                  }
-              }
-          }
-          EOF
-          fi
           grep -R "compileSdk" -n android
 
       - name: Install Flutter dependencies
         working-directory: mobile_flutter
         run: flutter pub get
+
+      - name: Use Android API 36 for plugin compile SDK
+        working-directory: mobile_flutter
+        run: |
+          for file in $(find "${PUB_CACHE:-$HOME/.pub-cache}" -path "*/android/build.gradle" -o -path "*/android/build.gradle.kts"); do
+            sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter\.compileSdkVersion/compileSdk = 36/g' "$file"
+            sed -i -E 's/compileSdkVersion[[:space:]]+flutter\.compileSdkVersion/compileSdkVersion 36/g' "$file"
+            sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/g' "$file"
+            sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' "$file"
+          done
+          grep -R "compileSdk" -n "${PUB_CACHE:-$HOME/.pub-cache}/hosted" | head -80
 
       - name: Analyze Flutter project
         working-directory: mobile_flutter
