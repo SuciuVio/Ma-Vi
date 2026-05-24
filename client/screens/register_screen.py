@@ -6,11 +6,11 @@ from typing import Any
 
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
 from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton
-from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.textfield import MDTextField
 
 from client.screens.async_helpers import run_in_thread
 from client.utils.validators import validate_email, validate_password, validate_username
@@ -24,18 +24,18 @@ class RegisterScreen(MDScreen):
         if self.children:
             return
         layout = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(18))
-        layout.add_widget(MDLabel(text="Register", halign="center", font_style="H4", size_hint_y=None, height=dp(72)))
-        self.username = MDTextField(hint_text="Username", mode="rectangle")
-        self.email = MDTextField(hint_text="Email", mode="rectangle")
-        self.password = MDTextField(hint_text="Password", password=True, mode="rectangle")
-        self.confirm = MDTextField(hint_text="Confirm password", password=True, mode="rectangle")
-        self.status = MDLabel(text="", halign="center", theme_text_color="Secondary")
+        layout.add_widget(Label(text="Create account", font_size=dp(28), size_hint_y=None, height=dp(72)))
+        self.username = TextInput(hint_text="Username", multiline=False, size_hint_y=None, height=dp(48))
+        self.email = TextInput(hint_text="Email", multiline=False, size_hint_y=None, height=dp(48))
+        self.password = TextInput(hint_text="Password", password=True, multiline=False, size_hint_y=None, height=dp(48))
+        self.confirm = TextInput(hint_text="Confirm password", password=True, multiline=False, size_hint_y=None, height=dp(48))
+        self.status = Label(text="", size_hint_y=None, height=dp(60))
         layout.add_widget(self.username)
         layout.add_widget(self.email)
         layout.add_widget(self.password)
         layout.add_widget(self.confirm)
-        layout.add_widget(MDRaisedButton(text="Register", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.register()))
-        layout.add_widget(MDRaisedButton(text="Back to login", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "login")))
+        layout.add_widget(Button(text="Register", size_hint_y=None, height=dp(48), on_release=lambda *_: self.register()))
+        layout.add_widget(Button(text="Back to login", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "login")))
         layout.add_widget(self.status)
         self.add_widget(layout)
 
