@@ -7,11 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _host_from_env() -> str:
+    """Return a bind host accepted by local and hosted environments."""
+    host = os.getenv("MAVI_HOST", "127.0.0.1").strip()
+    if host.count("0.0.0.0") > 1:
+        return "0.0.0.0"
+    return host
+
+
 @dataclass(frozen=True)
 class ServerConfig:
     """Runtime configuration for the WebSocket and REST server."""
 
-    host: str = os.getenv("MAVI_HOST", "127.0.0.1")
+    host: str = _host_from_env()
     port: int = int(os.getenv("MAVI_PORT") or os.getenv("PORT", "8765"))
     database_path: Path = Path(os.getenv("MAVI_DB", "mavi.sqlite3"))
     token_ttl_seconds: int = int(os.getenv("MAVI_TOKEN_TTL", "86400"))
