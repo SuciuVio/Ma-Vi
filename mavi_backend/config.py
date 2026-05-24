@@ -13,6 +13,7 @@ class Settings:
 
     database_path: Path = Path(os.getenv("MAVI_DB", "mavi.sqlite3"))
     upload_dir: Path = Path(os.getenv("MAVI_UPLOAD_DIR", "uploads"))
+    attachment_ttl_days: int = int(os.getenv("MAVI_ATTACHMENT_TTL_DAYS", "3"))
     token_ttl_seconds: int = int(os.getenv("MAVI_TOKEN_TTL", "86400"))
     refresh_ttl_seconds: int = int(os.getenv("MAVI_REFRESH_TTL", "604800"))
 

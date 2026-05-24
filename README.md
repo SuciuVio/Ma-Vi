@@ -38,6 +38,8 @@ The new direction is Flutter + FastAPI + SQLite:
 - SQLite remains the source of truth for users, messages, contacts, and attachments.
 - Attachments are uploaded to the server and referenced from chat messages instead
   of using peer-to-peer file paths.
+- Uploaded attachment files are temporary. `MAVI_ATTACHMENT_TTL_DAYS` controls
+  how many days they remain available before server cleanup removes them.
 
 ## Android Build
 

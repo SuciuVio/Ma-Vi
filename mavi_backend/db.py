@@ -5,7 +5,6 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
 
 from mavi_backend.config import SETTINGS
@@ -85,6 +84,7 @@ CREATE TABLE IF NOT EXISTS attachments (
   content_type TEXT NOT NULL,
   file_size INTEGER NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME,
   FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -99,6 +99,22 @@ def init_db() -> None:
     SETTINGS.database_path.parent.mkdir(parents=True, exist_ok=True)
     with connect() as db:
         db.executescript(SCHEMA)
+        migrate_db(db)
+
+
+def migrate_db(db: sqlite3.Connection) -> None:
+    """Apply lightweight SQLite migrations for existing databases."""
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(attachments)").fetchall()}
+    if "expires_at" not in columns:
+        db.execute("ALTER TABLE attachments ADD COLUMN expires_at DATETIME")
+    db.execute(
+        """
+        UPDATE attachments
+        SET expires_at = datetime(created_at, ?)
+        WHERE expires_at IS NULL
+        """,
+        (f"+{SETTINGS.attachment_ttl_days} days",),
+    )
 
 
 def connect() -> sqlite3.Connection:
@@ -157,3 +173,23 @@ def conversation_id(db: sqlite3.Connection, user_id: int, peer_id: int) -> int:
         (first, second),
     )
     return int(cursor.lastrowid)
+
+
+def cleanup_expired_attachments() -> int:
+    """Remove expired attachment rows and files from temporary storage."""
+    removed = 0
+    with session() as db:
+        rows = db.execute(
+            """
+            SELECT id, stored_name
+            FROM attachments
+            WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP
+            """
+        ).fetchall()
+        for row in rows:
+            path = SETTINGS.upload_dir / str(row["stored_name"])
+            if path.exists():
+                path.unlink()
+            db.execute("DELETE FROM attachments WHERE id = ?", (row["id"],))
+            removed += 1
+    return removed

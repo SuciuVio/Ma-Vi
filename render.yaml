@@ -13,5 +13,7 @@ services:
         value: /opt/render/project/src/mavi.sqlite3
       - key: MAVI_UPLOAD_DIR
         value: /opt/render/project/src/uploads
+      - key: MAVI_ATTACHMENT_TTL_DAYS
+        value: 3
       - key: PYTHON_VERSION
         value: 3.11.9

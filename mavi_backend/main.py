@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from mavi_backend.config import SETTINGS
-from mavi_backend.db import conversation_id, init_db, row_to_dict, session, user_public
+from mavi_backend.db import cleanup_expired_attachments, conversation_id, init_db, row_to_dict, session, user_public
 from mavi_backend.security import hash_password, session_payload, verify_password
 
 
@@ -110,12 +110,13 @@ def startup() -> None:
     """Initialize SQLite and upload storage."""
     init_db()
     SETTINGS.upload_dir.mkdir(parents=True, exist_ok=True)
+    cleanup_expired_attachments()
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
     """Return service health."""
-    return {"ok": True, "service": "mavi-fastapi", "database": "sqlite"}
+    return {"ok": True, "service": "mavi-fastapi", "database": "sqlite", "attachment_ttl_days": SETTINGS.attachment_ttl_days}
 
 
 @app.post("/api/auth/register")
@@ -238,6 +239,7 @@ def conversations(user: dict[str, Any] = Depends(current_user)) -> dict[str, Any
 @app.get("/api/messages")
 def messages(peer_id: int, user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
     """Return messages with a peer."""
+    cleanup_expired_attachments()
     with session() as db:
         convo_id = conversation_id(db, int(user["id"]), peer_id)
         rows = db.execute(
@@ -286,6 +288,7 @@ async def send_message(payload: MessageRequest, user: dict[str, Any] = Depends(c
 @app.post("/api/attachments")
 async def upload_attachment(file: UploadFile = File(...), user: dict[str, Any] = Depends(current_user)) -> dict[str, Any]:
     """Upload a file to server storage and record metadata in SQLite."""
+    cleanup_expired_attachments()
     content = await file.read()
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large")
@@ -296,10 +299,10 @@ async def upload_attachment(file: UploadFile = File(...), user: dict[str, Any] =
     with session() as db:
         cursor = db.execute(
             """
-            INSERT INTO attachments (owner_id, file_name, stored_name, content_type, file_size)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO attachments (owner_id, file_name, stored_name, content_type, file_size, expires_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now', ?))
             """,
-            (user["id"], safe_name, stored_name, file.content_type or "application/octet-stream", len(content)),
+            (user["id"], safe_name, stored_name, file.content_type or "application/octet-stream", len(content), f"+{SETTINGS.attachment_ttl_days} days"),
         )
         attachment = row_to_dict(db.execute("SELECT * FROM attachments WHERE id = ?", (int(cursor.lastrowid),)).fetchone())
     return {"attachment": attachment}
@@ -308,8 +311,16 @@ async def upload_attachment(file: UploadFile = File(...), user: dict[str, Any] =
 @app.get("/api/attachments/{attachment_id}")
 def download_attachment(attachment_id: int, user: dict[str, Any] = Depends(current_user)) -> FileResponse:
     """Download an uploaded attachment."""
+    cleanup_expired_attachments()
     with session() as db:
-        row = db.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
+        row = db.execute(
+            """
+            SELECT *
+            FROM attachments
+            WHERE id = ? AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+            """,
+            (attachment_id,),
+        ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Attachment not found")
     path = SETTINGS.upload_dir / str(row["stored_name"])
