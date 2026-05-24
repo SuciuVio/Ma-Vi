@@ -6,9 +6,9 @@ from typing import Any
 
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
 from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton, MDTextButton
-from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
 from client.screens.async_helpers import run_in_thread
@@ -22,17 +22,17 @@ class ProfileScreen(MDScreen):
         if self.children:
             return
         layout = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(18))
-        layout.add_widget(MDLabel(text="Profile", halign="center", font_style="H4", size_hint_y=None, height=dp(72)))
-        layout.add_widget(MDLabel(text="Avatar placeholder", halign="center"))
-        self.fingerprint = MDLabel(text="Your safety number is unavailable", halign="center", theme_text_color="Secondary")
+        layout.add_widget(Label(text="Profile", font_size=dp(28), size_hint_y=None, height=dp(72)))
+        layout.add_widget(Label(text="Avatar placeholder", size_hint_y=None, height=dp(42)))
+        self.fingerprint = Label(text="Your safety number is unavailable", size_hint_y=None, height=dp(54))
         self.contacts = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
         self.contacts.bind(minimum_height=self.contacts.setter("height"))
-        self.status = MDLabel(text="", halign="center", theme_text_color="Secondary")
+        self.status = Label(text="", size_hint_y=None, height=dp(54))
         layout.add_widget(self.fingerprint)
-        layout.add_widget(MDRaisedButton(text="Load contacts", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.load_contacts()))
+        layout.add_widget(Button(text="Load contacts", size_hint_y=None, height=dp(48), on_release=lambda *_: self.load_contacts()))
         layout.add_widget(self.contacts)
-        layout.add_widget(MDRaisedButton(text="Settings", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "settings")))
-        layout.add_widget(MDRaisedButton(text="Logout", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.logout()))
+        layout.add_widget(Button(text="Settings", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "settings")))
+        layout.add_widget(Button(text="Logout", size_hint_y=None, height=dp(48), on_release=lambda *_: self.logout()))
         layout.add_widget(self.status)
         self.add_widget(layout)
 
@@ -69,15 +69,15 @@ class ProfileScreen(MDScreen):
         self.contacts.clear_widgets()
         self.status.text = "Contacts loaded"
         if not contacts:
-            self.contacts.add_widget(MDLabel(text="No contacts yet", halign="center", size_hint_y=None, height=dp(42)))
+            self.contacts.add_widget(Label(text="No contacts yet", size_hint_y=None, height=dp(42)))
             return
         for contact in contacts[:30]:
             row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(48))
             label = f"{contact['username']} ({contact['status']})"
             if contact.get("favorite"):
                 label = f"* {label}"
-            row.add_widget(MDLabel(text=label, halign="left"))
-            row.add_widget(MDTextButton(text="Chat", on_release=lambda _button, selected=contact: self.open_contact(selected)))
+            row.add_widget(Label(text=label))
+            row.add_widget(Button(text="Chat", size_hint_x=None, width=dp(96), on_release=lambda _button, selected=contact: self.open_contact(selected)))
             self.contacts.add_widget(row)
 
     def _contacts_error(self, exc: Exception) -> None:

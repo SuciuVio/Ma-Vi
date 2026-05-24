@@ -6,11 +6,11 @@ from typing import Any
 
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
 from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton, MDTextButton
-from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.textfield import MDTextField
 
 from client.screens.async_helpers import run_in_thread
 
@@ -23,17 +23,17 @@ class SearchUsersScreen(MDScreen):
         if self.children:
             return
         layout = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(18))
-        layout.add_widget(MDLabel(text="Search Users", halign="center", font_style="H4", size_hint_y=None, height=dp(72)))
-        self.query = MDTextField(hint_text="Search users", mode="rectangle")
+        layout.add_widget(Label(text="Search Users", font_size=dp(28), size_hint_y=None, height=dp(72)))
+        self.query = TextInput(hint_text="Search users", multiline=False, size_hint_y=None, height=dp(48))
         self.results = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
         self.results.bind(minimum_height=self.results.setter("height"))
-        self.status = MDLabel(text="", halign="center", theme_text_color="Secondary")
+        self.status = Label(text="", size_hint_y=None, height=dp(54))
         layout.add_widget(self.query)
-        layout.add_widget(MDRaisedButton(text="Search", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.search()))
-        layout.add_widget(MDLabel(text="Enter a username or email fragment", halign="center", theme_text_color="Secondary"))
+        layout.add_widget(Button(text="Search", size_hint_y=None, height=dp(48), on_release=lambda *_: self.search()))
+        layout.add_widget(Label(text="Enter a username or email fragment", size_hint_y=None, height=dp(42)))
         layout.add_widget(self.results)
         layout.add_widget(self.status)
-        layout.add_widget(MDRaisedButton(text="Back", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "chat_list")))
+        layout.add_widget(Button(text="Back", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "chat_list")))
         self.add_widget(layout)
 
     def search(self) -> None:
@@ -55,13 +55,13 @@ class SearchUsersScreen(MDScreen):
         self.status.text = "Search complete"
         self.results.clear_widgets()
         if not users:
-            self.results.add_widget(MDLabel(text="No users found", halign="center", size_hint_y=None, height=dp(42)))
+            self.results.add_widget(Label(text="No users found", size_hint_y=None, height=dp(42)))
             return
         for user in users[:20]:
             row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(48))
-            row.add_widget(MDLabel(text=f"{user['username']} ({user['status']})", halign="left"))
-            row.add_widget(MDTextButton(text="Start Chat", on_release=lambda _button, selected=user: self.start_chat(selected)))
-            row.add_widget(MDTextButton(text="Add Contact", on_release=lambda _button, selected=user: self.add_contact(selected)))
+            row.add_widget(Label(text=f"{user['username']} ({user['status']})"))
+            row.add_widget(Button(text="Chat", size_hint_x=None, width=dp(88), on_release=lambda _button, selected=user: self.start_chat(selected)))
+            row.add_widget(Button(text="Add", size_hint_x=None, width=dp(88), on_release=lambda _button, selected=user: self.add_contact(selected)))
             self.results.add_widget(row)
 
     def _search_error(self, exc: Exception) -> None:

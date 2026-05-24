@@ -9,13 +9,12 @@ from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.textinput import TextInput
 from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton
-from kivymd.uix.card import MDCard
-from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.textfield import MDTextField
 
 from client.screens.async_helpers import run_in_thread
 from network.encryption import get_key_fingerprint
@@ -34,37 +33,37 @@ class ChatScreen(MDScreen):
         if self.children:
             return
         layout = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(18))
-        layout.add_widget(MDLabel(text="Chat", halign="center", font_style="H4", size_hint_y=None, height=dp(72)))
-        layout.add_widget(MDLabel(text="End-to-end encrypted", halign="center", theme_text_color="Secondary"))
-        self.recipient_label = MDLabel(text="No recipient selected", halign="center", theme_text_color="Secondary")
-        self.fingerprint_label = MDLabel(text="Safety number unavailable", halign="center", theme_text_color="Secondary")
-        self.receiver = MDTextField(hint_text="Receiver user id", mode="rectangle", input_filter="int")
+        layout.add_widget(Label(text="Chat", font_size=dp(28), size_hint_y=None, height=dp(64)))
+        layout.add_widget(Label(text="End-to-end encrypted", size_hint_y=None, height=dp(32)))
+        self.recipient_label = Label(text="No recipient selected", size_hint_y=None, height=dp(36))
+        self.fingerprint_label = Label(text="Safety number unavailable", size_hint_y=None, height=dp(36))
+        self.receiver = TextInput(hint_text="Receiver user id", input_filter="int", multiline=False, size_hint_y=None, height=dp(48))
         self.message_list = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None, padding=(0, dp(8), 0, dp(8)))
         self.message_list.bind(minimum_height=self.message_list.setter("height"))
         self.messages = ScrollView(do_scroll_x=False)
         self.messages.add_widget(self.message_list)
-        self.empty_label = MDLabel(text="Messages appear here", halign="center", theme_text_color="Secondary", size_hint_y=None, height=dp(48))
+        self.empty_label = Label(text="Messages appear here", size_hint_y=None, height=dp(48))
         self.message_list.add_widget(self.empty_label)
-        self.message = MDTextField(hint_text="Message", mode="rectangle")
+        self.message = TextInput(hint_text="Message", multiline=False, size_hint_y=None, height=dp(48))
         self.message.bind(text=lambda _field, _text: self._send_typing())
-        self.file_path = MDTextField(hint_text="File path for transfer offer", mode="rectangle")
-        self.transfer_status = MDLabel(text="", halign="center", theme_text_color="Secondary")
+        self.file_path = TextInput(hint_text="File path for transfer offer", multiline=False, size_hint_y=None, height=dp(48))
+        self.transfer_status = Label(text="", size_hint_y=None, height=dp(36))
         self.active_call_id: int | None = None
-        self.status = MDLabel(text="", halign="center", theme_text_color="Secondary")
+        self.status = Label(text="", size_hint_y=None, height=dp(42))
         layout.add_widget(self.recipient_label)
         layout.add_widget(self.fingerprint_label)
         layout.add_widget(self.receiver)
         layout.add_widget(self.messages)
         layout.add_widget(self.message)
-        layout.add_widget(MDRaisedButton(text="Send", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.send()))
-        layout.add_widget(MDRaisedButton(text="Voice Call", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.start_call()))
-        layout.add_widget(MDRaisedButton(text="End Call", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.end_call()))
-        layout.add_widget(MDRaisedButton(text="Mute", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.toggle_mute()))
-        layout.add_widget(MDRaisedButton(text="Speaker", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.toggle_speaker()))
+        layout.add_widget(Button(text="Send", size_hint_y=None, height=dp(44), on_release=lambda *_: self.send()))
+        layout.add_widget(Button(text="Voice Call", size_hint_y=None, height=dp(44), on_release=lambda *_: self.start_call()))
+        layout.add_widget(Button(text="End Call", size_hint_y=None, height=dp(44), on_release=lambda *_: self.end_call()))
+        layout.add_widget(Button(text="Mute", size_hint_y=None, height=dp(44), on_release=lambda *_: self.toggle_mute()))
+        layout.add_widget(Button(text="Speaker", size_hint_y=None, height=dp(44), on_release=lambda *_: self.toggle_speaker()))
         layout.add_widget(self.file_path)
-        layout.add_widget(MDRaisedButton(text="Offer File", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.offer_file()))
+        layout.add_widget(Button(text="Offer File", size_hint_y=None, height=dp(44), on_release=lambda *_: self.offer_file()))
         layout.add_widget(self.transfer_status)
-        layout.add_widget(MDRaisedButton(text="Back", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "chat_list")))
+        layout.add_widget(Button(text="Back", size_hint_y=None, height=dp(44), on_release=lambda *_: setattr(self.manager, "current", "chat_list")))
         layout.add_widget(self.status)
         self.add_widget(layout)
 
@@ -286,20 +285,17 @@ class ChatScreen(MDScreen):
         if self.empty_label.parent is not None:
             self.message_list.remove_widget(self.empty_label)
         anchor = AnchorLayout(anchor_x="left", size_hint_y=None, height=dp(104))
-        card = MDCard(
+        card = BoxLayout(
             orientation="vertical",
             padding=(dp(12), dp(8), dp(12), dp(8)),
-            radius=[dp(18), dp(18), dp(18), dp(18)],
-            size_hint=(0.82, None),
+            size_hint=(0.88, None),
             height=dp(96),
-            elevation=1,
-            md_bg_color=(0.18, 0.18, 0.18, 1),
         )
-        card.add_widget(MDLabel(text=sender, theme_text_color="Custom", text_color=(0.85, 1, 0.96, 1), font_style="Caption", size_hint_y=None, height=dp(18)))
-        card.add_widget(MDLabel(text=f"File: {offer.get('file_name', 'file')} ({offer.get('file_size', 0)} bytes)", theme_text_color="Custom", text_color=(1, 1, 1, 1), size_hint_y=None, height=dp(30)))
+        card.add_widget(Label(text=sender, size_hint_y=None, height=dp(18)))
+        card.add_widget(Label(text=f"File: {offer.get('file_name', 'file')} ({offer.get('file_size', 0)} bytes)", size_hint_y=None, height=dp(30)))
         actions = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(36))
-        actions.add_widget(MDRaisedButton(text="Accept", on_release=lambda *_: self.respond_file_offer(int(offer["id"]), True, offer)))
-        actions.add_widget(MDRaisedButton(text="Refuse", on_release=lambda *_: self.respond_file_offer(int(offer["id"]), False, offer)))
+        actions.add_widget(Button(text="Accept", on_release=lambda *_: self.respond_file_offer(int(offer["id"]), True, offer)))
+        actions.add_widget(Button(text="Refuse", on_release=lambda *_: self.respond_file_offer(int(offer["id"]), False, offer)))
         card.add_widget(actions)
         anchor.add_widget(card)
         self.message_list.add_widget(anchor)
@@ -389,19 +385,16 @@ class ChatScreen(MDScreen):
         if self.empty_label.parent is not None:
             self.message_list.remove_widget(self.empty_label)
         anchor = AnchorLayout(anchor_x="left", size_hint_y=None, height=dp(104))
-        card = MDCard(
+        card = BoxLayout(
             orientation="vertical",
             padding=(dp(12), dp(8), dp(12), dp(8)),
-            radius=[dp(18), dp(18), dp(18), dp(18)],
-            size_hint=(0.82, None),
+            size_hint=(0.88, None),
             height=dp(96),
-            elevation=1,
-            md_bg_color=(0.18, 0.18, 0.18, 1),
         )
-        card.add_widget(MDLabel(text=f"Incoming voice call from {caller}", theme_text_color="Custom", text_color=(1, 1, 1, 1), size_hint_y=None, height=dp(36)))
+        card.add_widget(Label(text=f"Incoming voice call from {caller}", size_hint_y=None, height=dp(36)))
         actions = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(40))
-        actions.add_widget(MDRaisedButton(text="Accept", on_release=lambda *_: self.respond_call(int(call["id"]), True)))
-        actions.add_widget(MDRaisedButton(text="Decline", on_release=lambda *_: self.respond_call(int(call["id"]), False)))
+        actions.add_widget(Button(text="Accept", on_release=lambda *_: self.respond_call(int(call["id"]), True)))
+        actions.add_widget(Button(text="Decline", on_release=lambda *_: self.respond_call(int(call["id"]), False)))
         card.add_widget(actions)
         anchor.add_widget(card)
         self.message_list.add_widget(anchor)
@@ -507,28 +500,15 @@ class ChatScreen(MDScreen):
             self.message_list.remove_widget(self.empty_label)
 
         anchor = AnchorLayout(anchor_x="right" if mine else "left", size_hint_y=None, height=dp(88))
-        bubble = MDCard(
+        bubble = BoxLayout(
             orientation="vertical",
             padding=(dp(12), dp(8), dp(12), dp(8)),
-            radius=[dp(18), dp(18), dp(18), dp(18)],
-            size_hint=(0.78, None),
+            size_hint=(0.84, None),
             height=dp(80),
-            elevation=1,
-            md_bg_color=(0.11, 0.55, 0.46, 1) if mine else (0.18, 0.18, 0.18, 1),
         )
-        bubble.add_widget(MDLabel(text=sender, theme_text_color="Custom", text_color=(0.85, 1, 0.96, 1), font_style="Caption", size_hint_y=None, height=dp(18)))
-        bubble.add_widget(MDLabel(text=content, theme_text_color="Custom", text_color=(1, 1, 1, 1), size_hint_y=None, height=dp(32)))
-        bubble.add_widget(
-            MDLabel(
-                text=self._message_meta(message, mine),
-                halign="right",
-                theme_text_color="Custom",
-                text_color=(0.78, 0.95, 0.91, 1) if mine else (0.72, 0.72, 0.72, 1),
-                font_style="Caption",
-                size_hint_y=None,
-                height=dp(18),
-            )
-        )
+        bubble.add_widget(Label(text=sender, size_hint_y=None, height=dp(18)))
+        bubble.add_widget(Label(text=content, size_hint_y=None, height=dp(32)))
+        bubble.add_widget(Label(text=self._message_meta(message, mine), size_hint_y=None, height=dp(18)))
         anchor.add_widget(bubble)
         self.message_list.add_widget(anchor)
         Clock.schedule_once(lambda _dt: setattr(self.messages, "scroll_y", 0), 0)
