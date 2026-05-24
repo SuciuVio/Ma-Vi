@@ -42,6 +42,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 message: _messages[index],
                 attachmentUrl: _messages[index].attachmentId == null ? null : _api.attachmentUrl(_messages[index].attachmentId!),
                 token: widget.token,
+                mine: _messages[index].senderId != widget.peer.id,
               ),
             ),
           ),
@@ -103,15 +104,15 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.attachmentUrl, required this.token});
+  const _MessageBubble({required this.message, required this.attachmentUrl, required this.token, required this.mine});
 
   final MaviMessage message;
   final String? attachmentUrl;
   final String token;
+  final bool mine;
 
   @override
   Widget build(BuildContext context) {
-    final mine = false;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -133,7 +134,7 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 Text(message.content, style: const TextStyle(fontSize: 16)),
                 const SizedBox(height: 4),
-                Text(message.timestamp, style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 11)),
+                Text(message.timestamp, style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 11)),
               ],
             ),
           ),
