@@ -6,11 +6,11 @@ from typing import Any
 
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
 from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton
-from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.textfield import MDTextField
 
 from client.screens.async_helpers import run_in_thread
 
@@ -23,14 +23,14 @@ class LoginScreen(MDScreen):
         if self.children:
             return
         layout = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(18))
-        layout.add_widget(MDLabel(text="Login", halign="center", font_style="H4", size_hint_y=None, height=dp(72)))
-        self.username = MDTextField(hint_text="Username", mode="rectangle")
-        self.password = MDTextField(hint_text="Password", password=True, mode="rectangle")
-        self.status = MDLabel(text="", halign="center", theme_text_color="Secondary")
+        layout.add_widget(Label(text="Ma:Vi", font_size=dp(32), size_hint_y=None, height=dp(72)))
+        self.username = TextInput(hint_text="Username", multiline=False, size_hint_y=None, height=dp(48))
+        self.password = TextInput(hint_text="Password", password=True, multiline=False, size_hint_y=None, height=dp(48))
+        self.status = Label(text="", size_hint_y=None, height=dp(54))
         layout.add_widget(self.username)
         layout.add_widget(self.password)
-        layout.add_widget(MDRaisedButton(text="Login", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.login()))
-        layout.add_widget(MDRaisedButton(text="Create account", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "register")))
+        layout.add_widget(Button(text="Login", size_hint_y=None, height=dp(48), on_release=lambda *_: self.login()))
+        layout.add_widget(Button(text="Create account", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "register")))
         layout.add_widget(self.status)
         self.add_widget(layout)
 
