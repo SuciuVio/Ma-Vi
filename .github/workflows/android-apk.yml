@@ -66,7 +66,6 @@ jobs:
             ~/.buildozer
             ~/.gradle/caches
             ~/.gradle/wrapper
-            .buildozer
           key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
             buildozer-${{ runner.os }}-
