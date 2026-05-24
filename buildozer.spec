@@ -5,6 +5,7 @@ package.domain = com.mavi
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,sql,md
 source.exclude_dirs = .venv,tests,bin,build,__pycache__,server
+icon.filename = %(source.dir)s/assets/icon.png
 version = 0.1.0
 requirements = python3==3.10.11,hostpython3==3.10.11,kivy==2.2.1,kivymd==1.1.1,websockets,cryptography==41.0.7
 orientation = portrait
