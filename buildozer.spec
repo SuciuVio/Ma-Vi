@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,sql,md
 source.exclude_dirs = .venv,tests,bin,build,__pycache__,server
 version = 0.1.0
-requirements = python3,kivy==2.2.1,kivymd==1.1.1,websockets,bcrypt,pillow,pydub,cryptography,aiofiles,pydantic
+requirements = python3==3.10.11,hostpython3==3.10.11,kivy==2.2.1,kivymd==1.1.1,websockets,Pillow==8.4.0,cryptography
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET,RECORD_AUDIO,ACCESS_NETWORK_STATE,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
