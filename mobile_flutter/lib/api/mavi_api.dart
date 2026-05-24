@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 import '../models.dart';
 
@@ -70,6 +71,21 @@ class MaviApi {
   }
 
   String attachmentUrl(int id) => '$baseUrl/api/attachments/$id';
+
+  Future<File> downloadAttachment(String token, MaviMessage message) async {
+    final attachmentId = message.attachmentId;
+    if (attachmentId == null) {
+      throw Exception('No attachment on this message');
+    }
+    final response = await http.get(_uri('/api/attachments/$attachmentId'), headers: {'Authorization': 'Bearer $token'});
+    _ensureOk(response);
+    final directory = await getApplicationDocumentsDirectory();
+    final safeName = (message.fileName ?? message.content).replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final path = '${directory.path}/$safeName';
+    final file = File(path);
+    await file.writeAsBytes(response.bodyBytes);
+    return file;
+  }
 
   void _ensureOk(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {

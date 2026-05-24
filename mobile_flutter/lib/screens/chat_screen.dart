@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../api/mavi_api.dart';
 import '../models.dart';
@@ -43,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 attachmentUrl: _messages[index].attachmentId == null ? null : _api.attachmentUrl(_messages[index].attachmentId!),
                 token: widget.token,
                 mine: _messages[index].senderId != widget.peer.id,
+                onDownload: () => _download(_messages[index]),
               ),
             ),
           ),
@@ -92,7 +94,8 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final attachmentId = await _api.uploadAttachment(widget.token, File(path));
       final name = selected!.files.single.name;
-      final sent = await _api.sendMessage(widget.token, widget.peer.id, name, attachmentId: attachmentId, type: 'file');
+      final type = _isImageName(name) ? 'image' : 'file';
+      final sent = await _api.sendMessage(widget.token, widget.peer.id, name, attachmentId: attachmentId, type: type);
       setState(() {
         _messages = [..._messages, sent];
         _status = '';
@@ -101,15 +104,32 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _status = 'Upload failed: $error');
     }
   }
+
+  Future<void> _download(MaviMessage message) async {
+    setState(() => _status = 'Downloading...');
+    try {
+      final file = await _api.downloadAttachment(widget.token, message);
+      setState(() => _status = 'Downloaded: ${file.path.split(Platform.pathSeparator).last}');
+      await OpenFilex.open(file.path);
+    } catch (error) {
+      setState(() => _status = 'Download failed: $error');
+    }
+  }
+
+  bool _isImageName(String name) {
+    final lower = name.toLowerCase();
+    return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.bmp');
+  }
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.attachmentUrl, required this.token, required this.mine});
+  const _MessageBubble({required this.message, required this.attachmentUrl, required this.token, required this.mine, required this.onDownload});
 
   final MaviMessage message;
   final String? attachmentUrl;
   final String token;
   final bool mine;
+  final VoidCallback onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -127,12 +147,32 @@ class _MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (attachmentUrl != null && message.isImage)
+                if (attachmentUrl != null && message.isImage) ...[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(attachmentUrl!, headers: {'Authorization': 'Bearer $token'}, fit: BoxFit.cover),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 220, minWidth: 180),
+                      child: Image.network(attachmentUrl!, headers: {'Authorization': 'Bearer $token'}, fit: BoxFit.cover),
+                    ),
                   ),
-                Text(message.content, style: const TextStyle(fontSize: 16)),
+                  const SizedBox(height: 8),
+                ],
+                if (attachmentUrl != null && !message.isImage)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.insert_drive_file, size: 20),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text(message.fileName ?? message.content, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                if (attachmentUrl == null || !message.isImage)
+                  Text(message.content, style: const TextStyle(fontSize: 16)),
+                if (attachmentUrl != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(onPressed: onDownload, icon: const Icon(Icons.download, size: 18), label: const Text('Download')),
+                  ),
                 const SizedBox(height: 4),
                 Text(message.timestamp, style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 11)),
               ],
