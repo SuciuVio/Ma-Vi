@@ -1,0 +1,61 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "mobile_flutter/**"
+      - "mavi_backend/**"
+      - ".github/workflows/flutter-apk.yml"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  MAVI_API_BASE: https://ma-vi.onrender.com
+
+jobs:
+  build-flutter-apk:
+    name: Build Flutter debug APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project files
+        working-directory: mobile_flutter
+        run: flutter create . --platforms=android --org ro.mavi --project-name mavi_mobile
+
+      - name: Install Flutter dependencies
+        working-directory: mobile_flutter
+        run: flutter pub get
+
+      - name: Analyze Flutter project
+        working-directory: mobile_flutter
+        run: flutter analyze
+
+      - name: Build debug APK
+        working-directory: mobile_flutter
+        run: flutter build apk --debug --dart-define=MAVI_API_BASE=${{ env.MAVI_API_BASE }}
+
+      - name: Upload Flutter APK artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: mavi-flutter-debug-apk
+          path: mobile_flutter/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
