@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: mavi-server
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements-server.txt
+    startCommand: python -m server.server
+    healthCheckPath: /health
+    envVars:
+      - key: MAVI_HOST
+        value: 0.0.0.0
+      - key: MAVI_DB
+        value: /opt/render/project/src/mavi.sqlite3
