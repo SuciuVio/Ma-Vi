@@ -6,6 +6,23 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models.dart';
 
+class AuthSession {
+  const AuthSession({required this.token, required this.refreshToken, required this.username});
+
+  final String token;
+  final String refreshToken;
+  final String username;
+
+  factory AuthSession.fromJson(Map<String, dynamic> json) {
+    final user = json['user'] as Map<String, dynamic>? ?? {};
+    return AuthSession(
+      token: json['token'] as String,
+      refreshToken: json['refresh_token'] as String? ?? '',
+      username: user['username'] as String? ?? '',
+    );
+  }
+}
+
 class MaviApi {
   MaviApi({String? baseUrl}) : baseUrl = baseUrl ?? const String.fromEnvironment('MAVI_API_BASE', defaultValue: 'http://10.0.2.2:8765');
 
@@ -17,24 +34,34 @@ class MaviApi {
 
   Map<String, String> _headers(String token) => {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
 
-  Future<String> login(String username, String password) async {
+  Future<AuthSession> login(String username, String password) async {
     final response = await http.post(
       _uri('/api/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'username': username, 'password': password}),
     );
     _ensureOk(response);
-    return jsonDecode(response.body)['token'] as String;
+    return AuthSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  Future<String> register(String username, String email, String password) async {
+  Future<AuthSession> register(String username, String email, String password) async {
     final response = await http.post(
       _uri('/api/auth/register'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'username': username, 'email': email, 'password': password}),
     );
     _ensureOk(response);
-    return jsonDecode(response.body)['token'] as String;
+    return AuthSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<AuthSession> refresh(String refreshToken) async {
+    final response = await http.post(
+      _uri('/api/auth/refresh'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'refresh_token': refreshToken}),
+    );
+    _ensureOk(response);
+    return AuthSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<List<MaviUser>> search(String token, String query) async {

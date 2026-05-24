@@ -5,7 +5,7 @@ import '../api/mavi_api.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.onSignedIn});
 
-  final ValueChanged<String> onSignedIn;
+  final ValueChanged<AuthSession> onSignedIn;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
