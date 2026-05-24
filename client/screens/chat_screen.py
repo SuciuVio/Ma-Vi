@@ -20,6 +20,7 @@ from kivymd.app import MDApp
 from kivymd.uix.screen import MDScreen
 
 from client.screens.async_helpers import run_in_thread
+from client.utils.paths import mavi_data_dir
 from network.encryption import get_key_fingerprint
 
 
@@ -40,19 +41,14 @@ class ChatScreen(MDScreen):
 
         header = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(52))
         header.add_widget(Button(text="Back", font_size=dp(13), size_hint_x=None, width=dp(72), on_release=lambda *_: setattr(self.manager, "current", "chat_list")))
-        header_text = BoxLayout(orientation="vertical", spacing=dp(1))
-        self.recipient_label = Label(text="No recipient selected", font_size=dp(16), size_hint_y=None, height=dp(26))
-        self.fingerprint_label = Label(text="Safety number unavailable", font_size=dp(10), size_hint_y=None, height=dp(20))
+        header_text = BoxLayout(orientation="vertical")
+        self.recipient_label = Label(text="No recipient selected", font_size=dp(18))
+        self.fingerprint_label = Label(text="")
         header_text.add_widget(self.recipient_label)
-        header_text.add_widget(self.fingerprint_label)
         header.add_widget(header_text)
         layout.add_widget(header)
 
-        receiver_row = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(38))
-        receiver_row.add_widget(Label(text="To", font_size=dp(13), size_hint_x=None, width=dp(28)))
-        self.receiver = TextInput(hint_text="User id", input_filter="int", multiline=False, font_size=dp(16), size_hint_y=None, height=dp(38))
-        receiver_row.add_widget(self.receiver)
-        layout.add_widget(receiver_row)
+        self.receiver = TextInput(hint_text="User id", input_filter="int", multiline=False)
 
         self.message_list = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None, padding=(0, dp(8), 0, dp(8)))
         self.message_list.bind(minimum_height=self.message_list.setter("height"))
@@ -100,7 +96,7 @@ class ChatScreen(MDScreen):
         if user:
             self.receiver.text = str(user["id"])
             self.recipient_label.text = f"Chat with {user['username']}"
-            self.fingerprint_label.text = self._fingerprint_text(user)
+            self.fingerprint_label.text = ""
             self.status.text = ""
             self.load_history(int(user["id"]))
 
@@ -183,6 +179,33 @@ class ChatScreen(MDScreen):
 
     def choose_file(self) -> None:
         """Open a platform file picker when available."""
+        if self._choose_file_android():
+            return
+        self._choose_file_plyer()
+
+    def _choose_file_android(self) -> bool:
+        """Open Android's document picker and copy the selected content URI."""
+        try:
+            from android import activity
+            from jnius import autoclass
+        except Exception:
+            return False
+        try:
+            intent_class = autoclass("android.content.Intent")
+            python_activity = autoclass("org.kivy.android.PythonActivity")
+            intent = intent_class(intent_class.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(intent_class.CATEGORY_OPENABLE)
+            intent.setType("*/*")
+            activity.bind(on_activity_result=self._on_android_file_result)
+            python_activity.mActivity.startActivityForResult(intent, 6208)
+            self.status.text = "Choose a file..."
+            return True
+        except Exception as exc:
+            self.status.text = f"File picker failed: {exc}"
+            return True
+
+    def _choose_file_plyer(self) -> None:
+        """Fallback file picker for non-Android platforms."""
         try:
             from plyer import filechooser
         except Exception:
@@ -196,11 +219,91 @@ class ChatScreen(MDScreen):
 
     def _file_selected(self, selection: list[str] | tuple[str, ...]) -> None:
         """Store the file selected from the platform picker."""
-        if not selection:
+        if not selection or not selection[0] or str(selection[0]).lower() == "none":
             self.status.text = "No file selected"
+            self.selected_file_path = ""
+            self.file_label.text = "No file selected"
             return
-        self.selected_file_path = str(selection[0])
-        self.file_label.text = f"Selected: {Path(self.selected_file_path).name}"
+        self._set_selected_file(str(selection[0]))
+        self.status.text = ""
+
+    def _on_android_file_result(self, request_code: int, result_code: int, intent: object) -> None:
+        """Handle Android document picker result."""
+        if request_code != 6208:
+            return
+        try:
+            from android import activity
+            from jnius import autoclass
+
+            activity.unbind(on_activity_result=self._on_android_file_result)
+            android_activity = autoclass("android.app.Activity")
+            if result_code != android_activity.RESULT_OK or intent is None:
+                self.status.text = "No file selected"
+                return
+            uri = intent.getData()
+            if uri is None:
+                self.status.text = "No file selected"
+                return
+            target = self._copy_android_uri(uri)
+            self._set_selected_file(str(target))
+        except Exception as exc:
+            self.status.text = f"Attach failed: {exc}"
+
+    def _copy_android_uri(self, uri: object) -> Path:
+        """Copy a content URI into app-private storage and return its local path."""
+        from jnius import autoclass, jarray
+
+        python_activity = autoclass("org.kivy.android.PythonActivity")
+        resolver = python_activity.mActivity.getContentResolver()
+        filename = self._android_display_name(resolver, uri) or f"attachment-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        target_dir = mavi_data_dir() / "attachments"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / self._safe_attachment_name(filename)
+
+        input_stream = resolver.openInputStream(uri)
+        if input_stream is None:
+            raise OSError("Could not open selected file")
+        buffer = jarray("b")(8192)
+        try:
+            with target.open("wb") as output:
+                while True:
+                    count = input_stream.read(buffer)
+                    if count == -1:
+                        break
+                    output.write(bytes((int(buffer[index]) & 0xFF) for index in range(count)))
+        finally:
+            input_stream.close()
+        return target
+
+    def _android_display_name(self, resolver: object, uri: object) -> str | None:
+        """Read a display name from Android's content resolver."""
+        try:
+            from jnius import autoclass
+
+            openable_columns = autoclass("android.provider.OpenableColumns")
+            cursor = resolver.query(uri, None, None, None, None)
+            if cursor is None:
+                return None
+            try:
+                index = cursor.getColumnIndex(openable_columns.DISPLAY_NAME)
+                if index >= 0 and cursor.moveToFirst():
+                    return str(cursor.getString(index))
+            finally:
+                cursor.close()
+        except Exception:
+            return None
+        return None
+
+    def _safe_attachment_name(self, filename: str) -> str:
+        """Return a local filename safe for app-private storage."""
+        cleaned = "".join(char if char.isalnum() or char in "._- " else "_" for char in filename).strip()
+        return cleaned or "attachment"
+
+    def _set_selected_file(self, path: str) -> None:
+        """Store selected file path and update compact UI text."""
+        self.selected_file_path = path
+        name = Path(path).name or "file"
+        self.file_label.text = f"Selected: {name[:24]}"
         self.status.text = ""
 
     def _history_success(self, messages: list[dict[str, Any]]) -> None:
