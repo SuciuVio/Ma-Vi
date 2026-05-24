@@ -4,12 +4,14 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements-server.txt
-    startCommand: python -m server.server
+    startCommand: uvicorn mavi_backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: MAVI_HOST
         value: 0.0.0.0
       - key: MAVI_DB
         value: /opt/render/project/src/mavi.sqlite3
+      - key: MAVI_UPLOAD_DIR
+        value: /opt/render/project/src/uploads
       - key: PYTHON_VERSION
         value: 3.11.9
