@@ -12,6 +12,7 @@ on:
       - "network/**"
       - "p2p/**"
       - "database/**"
+      - "main.py"
       - "buildozer.spec"
       - ".github/workflows/android-apk.yml"
 
