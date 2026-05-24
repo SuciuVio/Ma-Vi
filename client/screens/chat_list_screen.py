@@ -6,9 +6,9 @@ from typing import Any
 
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
 from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton, MDIconButton, MDTextButton
-from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
 from client.screens.async_helpers import run_in_thread
@@ -22,16 +22,16 @@ class ChatListScreen(MDScreen):
         if self.children:
             return
         layout = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(18))
-        layout.add_widget(MDLabel(text="Chats", halign="center", font_style="H4", size_hint_y=None, height=dp(72)))
-        self.status = MDLabel(text="Sign in to load conversations", halign="center", theme_text_color="Secondary")
+        layout.add_widget(Label(text="Chats", font_size=dp(28), size_hint_y=None, height=dp(72)))
+        self.status = Label(text="Sign in to load conversations", size_hint_y=None, height=dp(54))
         self.conversations = BoxLayout(orientation="vertical", spacing=dp(8), size_hint_y=None)
         self.conversations.bind(minimum_height=self.conversations.setter("height"))
         layout.add_widget(self.status)
         layout.add_widget(self.conversations)
-        layout.add_widget(MDRaisedButton(text="Refresh", pos_hint={"center_x": 0.5}, on_release=lambda *_: self.refresh()))
-        layout.add_widget(MDIconButton(icon="magnify", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "search")))
-        layout.add_widget(MDRaisedButton(text="Open chat", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "chat")))
-        layout.add_widget(MDRaisedButton(text="Profile", pos_hint={"center_x": 0.5}, on_release=lambda *_: setattr(self.manager, "current", "profile")))
+        layout.add_widget(Button(text="Refresh", size_hint_y=None, height=dp(48), on_release=lambda *_: self.refresh()))
+        layout.add_widget(Button(text="Search", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "search")))
+        layout.add_widget(Button(text="Open chat", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "chat")))
+        layout.add_widget(Button(text="Profile", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "profile")))
         self.add_widget(layout)
 
     def on_enter(self, *args: object) -> None:
@@ -57,13 +57,13 @@ class ChatListScreen(MDScreen):
         self.status.text = "Conversations loaded"
         self.conversations.clear_widgets()
         if not items:
-            self.conversations.add_widget(MDLabel(text="No conversations yet", halign="center", size_hint_y=None, height=dp(42)))
+            self.conversations.add_widget(Label(text="No conversations yet", size_hint_y=None, height=dp(42)))
             return
         for item in items[:20]:
             row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(54))
             label = f"{item.get('peer_username', 'Unknown')} - {item.get('last_message') or 'No messages yet'}"
-            row.add_widget(MDLabel(text=label, halign="left"))
-            row.add_widget(MDTextButton(text="Open", on_release=lambda _button, selected=item: self.open_chat(selected)))
+            row.add_widget(Label(text=label))
+            row.add_widget(Button(text="Open", size_hint_x=None, width=dp(96), on_release=lambda _button, selected=item: self.open_chat(selected)))
             self.conversations.add_widget(row)
 
     def _refresh_error(self, exc: Exception) -> None:
