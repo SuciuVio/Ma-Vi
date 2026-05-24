@@ -33,6 +33,7 @@ class ProfileScreen(MDScreen):
         layout.add_widget(self.contacts)
         layout.add_widget(Button(text="Settings", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "settings")))
         layout.add_widget(Button(text="Logout", size_hint_y=None, height=dp(48), on_release=lambda *_: self.logout()))
+        layout.add_widget(Button(text="Back", size_hint_y=None, height=dp(48), on_release=lambda *_: setattr(self.manager, "current", "chat_list")))
         layout.add_widget(self.status)
         self.add_widget(layout)
 

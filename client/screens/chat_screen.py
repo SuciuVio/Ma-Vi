@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+import textwrap
 from typing import Any
 
 from kivy.clock import Clock
+from kivy.graphics import Color, RoundedRectangle
 from kivy.metrics import dp
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.boxlayout import BoxLayout
@@ -27,6 +30,7 @@ class ChatScreen(MDScreen):
         super().__init__(**kwargs)
         self._listener_registered = False
         self._last_typing_sent = 0.0
+        self.selected_file_path = ""
 
     def on_pre_enter(self, *args: object) -> None:
         """Create widgets lazily so Kivy properties are ready."""
@@ -73,8 +77,9 @@ class ChatScreen(MDScreen):
         layout.add_widget(call_tools)
 
         file_tools = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(38))
-        self.file_path = TextInput(hint_text="File path", multiline=False, font_size=dp(14), size_hint_y=None, height=dp(38))
-        file_tools.add_widget(self.file_path)
+        self.file_label = Label(text="No file selected", font_size=dp(11))
+        file_tools.add_widget(Button(text="Attach", font_size=dp(12), size_hint_x=None, width=dp(86), on_release=lambda *_: self.choose_file()))
+        file_tools.add_widget(self.file_label)
         file_tools.add_widget(Button(text="Offer", font_size=dp(12), size_hint_x=None, width=dp(76), on_release=lambda *_: self.offer_file()))
         layout.add_widget(file_tools)
 
@@ -155,9 +160,9 @@ class ChatScreen(MDScreen):
         if not self.receiver.text:
             self.status.text = "Enter receiver user id"
             return
-        path = self.file_path.text.strip()
+        path = self.selected_file_path.strip()
         if not path:
-            self.status.text = "Enter a file path"
+            self.status.text = "Attach a file first"
             return
         receiver_id = int(self.receiver.text)
         self.status.text = "Preparing file offer..."
@@ -175,6 +180,28 @@ class ChatScreen(MDScreen):
     def _file_offer_error(self, exc: Exception) -> None:
         """Show file offer errors."""
         self.status.text = f"File offer failed: {exc}"
+
+    def choose_file(self) -> None:
+        """Open a platform file picker when available."""
+        try:
+            from plyer import filechooser
+        except Exception:
+            self.status.text = "File picker unavailable in this build"
+            return
+        try:
+            filechooser.open_file(on_selection=self._file_selected)
+            self.status.text = "Choose a file..."
+        except Exception as exc:
+            self.status.text = f"File picker failed: {exc}"
+
+    def _file_selected(self, selection: list[str] | tuple[str, ...]) -> None:
+        """Store the file selected from the platform picker."""
+        if not selection:
+            self.status.text = "No file selected"
+            return
+        self.selected_file_path = str(selection[0])
+        self.file_label.text = f"Selected: {Path(self.selected_file_path).name}"
+        self.status.text = ""
 
     def _history_success(self, messages: list[dict[str, Any]]) -> None:
         """Render loaded history."""
@@ -517,19 +544,60 @@ class ChatScreen(MDScreen):
         if self.empty_label.parent is not None:
             self.message_list.remove_widget(self.empty_label)
 
-        anchor = AnchorLayout(anchor_x="right" if mine else "left", size_hint_y=None, height=dp(88))
+        wrapped_content = self._wrap_message_text(content)
+        content_lines = max(1, wrapped_content.count("\n") + 1)
+        sender_lines = 0 if mine else 1
+        bubble_height = dp(24 + (content_lines * 19) + (sender_lines * 17) + 16)
+        anchor = AnchorLayout(anchor_x="right" if mine else "left", size_hint_y=None, height=bubble_height + dp(8))
         bubble = BoxLayout(
             orientation="vertical",
-            padding=(dp(12), dp(8), dp(12), dp(8)),
-            size_hint=(0.84, None),
-            height=dp(80),
+            padding=(dp(10), dp(6), dp(10), dp(5)),
+            size_hint=(0.78, None),
+            height=bubble_height,
         )
-        bubble.add_widget(Label(text=sender, size_hint_y=None, height=dp(18)))
-        bubble.add_widget(Label(text=content, size_hint_y=None, height=dp(32)))
-        bubble.add_widget(Label(text=self._message_meta(message, mine), size_hint_y=None, height=dp(18)))
+        self._paint_background(bubble, (0.08, 0.42, 0.34, 1) if mine else (0.20, 0.20, 0.20, 1))
+        if not mine:
+            bubble.add_widget(Label(text=sender, color=(0.52, 0.90, 0.80, 1), font_size=dp(11), size_hint_y=None, height=dp(17)))
+        bubble.add_widget(
+            Label(
+                text=wrapped_content,
+                color=(1, 1, 1, 1),
+                font_size=dp(15),
+                halign="left",
+                valign="middle",
+                size_hint_y=None,
+                height=dp(content_lines * 19 + 4),
+            )
+        )
+        bubble.add_widget(
+            Label(
+                text=self._message_meta(message, mine),
+                color=(0.72, 0.86, 0.82, 1) if mine else (0.62, 0.62, 0.62, 1),
+                font_size=dp(9),
+                halign="right",
+                size_hint_y=None,
+                height=dp(14),
+            )
+        )
         anchor.add_widget(bubble)
         self.message_list.add_widget(anchor)
         Clock.schedule_once(lambda _dt: setattr(self.messages, "scroll_y", 0), 0)
+
+    def _paint_background(self, widget: BoxLayout, color: tuple[float, float, float, float]) -> None:
+        """Draw a lightweight rounded background behind a bubble."""
+        with widget.canvas.before:
+            Color(*color)
+            background = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[dp(14)])
+        widget.bind(pos=lambda instance, _value: setattr(background, "pos", instance.pos))
+        widget.bind(size=lambda instance, _value: setattr(background, "size", instance.size))
+
+    def _wrap_message_text(self, content: str) -> str:
+        """Wrap long chat text so it stays inside the screen."""
+        lines: list[str] = []
+        for source_line in str(content).splitlines() or [""]:
+            wrapped = textwrap.wrap(source_line, width=30, break_long_words=True, replace_whitespace=False)
+            lines.extend(wrapped or [""])
+        return "\n".join(lines)
 
     def _message_meta(self, message: dict[str, Any] | None, mine: bool) -> str:
         """Build compact timestamp and delivery metadata for a bubble."""
@@ -565,7 +633,8 @@ class ChatScreen(MDScreen):
         if not public_key:
             return "Safety number unavailable"
         try:
-            return f"Safety number: {get_key_fingerprint(str(public_key))}"
+            fingerprint = get_key_fingerprint(str(public_key))
+            return f"Safety: {fingerprint[:9]}...{fingerprint[-9:]}"
         except Exception:
             return "Safety number unavailable"
 
