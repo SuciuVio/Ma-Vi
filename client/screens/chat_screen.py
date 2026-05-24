@@ -251,7 +251,7 @@ class ChatScreen(MDScreen):
 
     def _copy_android_uri(self, uri: object) -> Path:
         """Copy a content URI into app-private storage and return its local path."""
-        from jnius import autoclass, jarray
+        from jnius import autoclass
 
         python_activity = autoclass("org.kivy.android.PythonActivity")
         resolver = python_activity.mActivity.getContentResolver()
@@ -263,14 +263,13 @@ class ChatScreen(MDScreen):
         input_stream = resolver.openInputStream(uri)
         if input_stream is None:
             raise OSError("Could not open selected file")
-        buffer = jarray("b")(8192)
         try:
             with target.open("wb") as output:
                 while True:
-                    count = input_stream.read(buffer)
-                    if count == -1:
+                    value = input_stream.read()
+                    if value == -1:
                         break
-                    output.write(bytes((int(buffer[index]) & 0xFF) for index in range(count)))
+                    output.write(bytes((int(value) & 0xFF,)))
         finally:
             input_stream.close()
         return target
