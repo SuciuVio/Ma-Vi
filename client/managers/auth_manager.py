@@ -8,6 +8,7 @@ import urllib.request
 from typing import Any
 
 from client.utils.constants import SERVER_BASE_URL
+from client.utils.paths import mavi_data_dir
 from network.encryption import encrypt_private_key, generate_keypair, get_key_fingerprint
 
 
@@ -20,8 +21,9 @@ class AuthManager:
         self.expires_at: str | None = None
         self.user: dict[str, Any] | None = None
         self.password: str | None = None
-        self.session_path = Path.home() / ".mavi" / "session.json"
-        self.keys_path = Path.home() / ".mavi" / "keys.json"
+        data_dir = mavi_data_dir()
+        self.session_path = data_dir / "session.json"
+        self.keys_path = data_dir / "keys.json"
         self.load_session()
 
     def register(self, username: str, email: str, password: str, public_key: str = "") -> dict[str, Any]:

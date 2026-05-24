@@ -12,13 +12,14 @@ from typing import Any
 
 from p2p.file_transfer import receive_file, send_file
 from network.encryption import decrypt_file, encrypt_file
+from client.utils.paths import mavi_data_dir
 
 
 class FileManager:
     """Resolve Ma:Vi file storage locations."""
 
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or Path.home() / ".mavi" / "files"
+        self.root = root or mavi_data_dir() / "files"
         self.root.mkdir(parents=True, exist_ok=True)
         self.transfers: dict[str, dict[str, Any]] = {}
 
