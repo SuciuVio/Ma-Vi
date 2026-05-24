@@ -13,6 +13,7 @@ from kivy.metrics import dp
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
@@ -32,6 +33,8 @@ class ChatScreen(MDScreen):
         self._listener_registered = False
         self._last_typing_sent = 0.0
         self.selected_file_path = ""
+        self._rendered_received_files: set[str] = set()
+        self._incoming_file_offers: dict[str, dict[str, Any]] = {}
 
     def on_pre_enter(self, *args: object) -> None:
         """Create widgets lazily so Kivy properties are ready."""
@@ -171,7 +174,7 @@ class ChatScreen(MDScreen):
     def _file_offer_success(self, offer: dict[str, Any]) -> None:
         """Render a created file offer."""
         self.status.text = "File offer sent"
-        self._append_rendered_message("Me", f"File offer: {offer['file_name']} ({offer['file_size']} bytes)")
+        self._add_file_card("Me", offer, mine=True, local_path=self.selected_file_path, state="Offer sent")
 
     def _file_offer_error(self, exc: Exception) -> None:
         """Show file offer errors."""
@@ -424,26 +427,48 @@ class ChatScreen(MDScreen):
         offer = payload.get("offer", {})
         if not active or int(payload.get("sender", 0)) != int(active["id"]):
             return
-        self._add_file_offer_row(str(active["username"]), offer)
+        self._add_file_card(str(active["username"]), offer, mine=False, incoming=True, state="Incoming file")
         self.status.text = "Incoming file offer"
 
     def _add_file_offer_row(self, sender: str, offer: dict[str, Any]) -> None:
         """Render an incoming file offer with accept/refuse actions."""
+        self._add_file_card(sender, offer, mine=False, incoming=True, state="Incoming file")
+
+    def _add_file_card(
+        self,
+        sender: str,
+        offer: dict[str, Any],
+        mine: bool,
+        local_path: str | None = None,
+        incoming: bool = False,
+        state: str = "",
+    ) -> None:
+        """Render a file attachment card with optional image preview."""
         if self.empty_label.parent is not None:
             self.message_list.remove_widget(self.empty_label)
-        anchor = AnchorLayout(anchor_x="left", size_hint_y=None, height=dp(104))
+        file_name = self._file_display_name(offer)
+        preview_path = local_path if local_path and self._is_image_file(local_path, offer) and Path(local_path).exists() else None
+        card_height = dp(220) if preview_path else dp(112)
+        anchor = AnchorLayout(anchor_x="right" if mine else "left", size_hint_y=None, height=card_height + dp(8))
         card = BoxLayout(
             orientation="vertical",
-            padding=(dp(12), dp(8), dp(12), dp(8)),
-            size_hint=(0.88, None),
-            height=dp(96),
+            padding=(dp(10), dp(7), dp(10), dp(7)),
+            spacing=dp(4),
+            size_hint=(0.82, None),
+            height=card_height,
         )
-        card.add_widget(Label(text=sender, size_hint_y=None, height=dp(18)))
-        card.add_widget(Label(text=f"File: {offer.get('file_name', 'file')} ({offer.get('file_size', 0)} bytes)", size_hint_y=None, height=dp(30)))
-        actions = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(36))
-        actions.add_widget(Button(text="Accept", on_release=lambda *_: self.respond_file_offer(int(offer["id"]), True, offer)))
-        actions.add_widget(Button(text="Refuse", on_release=lambda *_: self.respond_file_offer(int(offer["id"]), False, offer)))
-        card.add_widget(actions)
+        self._paint_background(card, (0.08, 0.42, 0.34, 1) if mine else (0.20, 0.20, 0.20, 1))
+        if not mine:
+            card.add_widget(Label(text=sender, color=(0.52, 0.90, 0.80, 1), font_size=dp(11), size_hint_y=None, height=dp(16)))
+        if preview_path:
+            card.add_widget(Image(source=preview_path, allow_stretch=True, keep_ratio=True, size_hint_y=None, height=dp(128)))
+        card.add_widget(Label(text=f"File: {file_name}", color=(1, 1, 1, 1), font_size=dp(14), size_hint_y=None, height=dp(24)))
+        card.add_widget(Label(text=self._file_card_meta(offer, state), color=(0.72, 0.72, 0.72, 1), font_size=dp(10), size_hint_y=None, height=dp(18)))
+        if incoming:
+            actions = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(34))
+            actions.add_widget(Button(text="Download", font_size=dp(11), on_release=lambda *_: self.respond_file_offer(int(offer["id"]), True, offer)))
+            actions.add_widget(Button(text="Refuse", font_size=dp(11), on_release=lambda *_: self.respond_file_offer(int(offer["id"]), False, offer)))
+            card.add_widget(actions)
         anchor.add_widget(card)
         self.message_list.add_widget(anchor)
         Clock.schedule_once(lambda _dt: setattr(self.messages, "scroll_y", 0), 0)
@@ -457,6 +482,8 @@ class ChatScreen(MDScreen):
         self.status.text = "Sending file response..."
         peer = app.files.start_receive(str(file_id), decrypt_info=self._file_decrypt_info(offer)) if accepted else None
         if accepted:
+            active = app.active_chat_user or {}
+            self._incoming_file_offers[str(file_id)] = {"sender": str(active.get("username", "Peer")), "offer": offer}
             self._watch_transfer(str(file_id))
         run_in_thread(
             lambda: app.chat.respond_file(app.auth.token, file_id, accepted, peer),
@@ -468,7 +495,7 @@ class ChatScreen(MDScreen):
         """Show local file response status."""
         action = "accepted" if accepted else "refused"
         self.status.text = f"File offer {action}"
-        self._append_rendered_message("Me", f"{action.title()} file offer: {offer['file_name']}")
+        self._add_file_card("Me", offer, mine=True, state=f"{action.title()} file offer")
 
     def _file_response_error(self, exc: Exception) -> None:
         """Show file response errors."""
@@ -484,10 +511,7 @@ class ChatScreen(MDScreen):
         if offer.get("status") == "accepted" and offer.get("peer_host") and offer.get("peer_port"):
             app.files.start_send(str(offer["id"]), str(offer.get("file_path", "")), str(offer["peer_host"]), int(offer["peer_port"]))
             self._watch_transfer(str(offer["id"]))
-        self._append_rendered_message(
-            str(active["username"]),
-            f"{str(offer.get('status', 'updated')).title()} file offer: {offer.get('file_name', 'file')}",
-        )
+        self._add_file_card(str(active["username"]), offer, mine=False, state=str(offer.get("status", "updated")).title())
         self.status.text = "File response received"
 
     def start_call(self) -> None:
@@ -628,6 +652,26 @@ class ChatScreen(MDScreen):
         app = MDApp.get_running_app()
         status = app.files.transfer_status(transfer_id)
         self.transfer_status.text = f"Transfer {transfer_id}: {status['status']} {status.get('progress', 0)}%"
+        if status["status"] == "received" and transfer_id not in self._rendered_received_files and status.get("file"):
+            self._rendered_received_files.add(transfer_id)
+            file_path = str(status["file"])
+            incoming = self._incoming_file_offers.get(transfer_id, {})
+            offer = dict(incoming.get("offer") or {})
+            sender = str(incoming.get("sender") or "Peer")
+            offer.update(
+                {
+                    "file_name": Path(file_path).name,
+                    "file_size": Path(file_path).stat().st_size if Path(file_path).exists() else 0,
+                    "file_type": "image/*" if self._is_image_file(file_path, offer) else offer.get("file_type", "application/octet-stream"),
+                }
+            )
+            self._add_file_card(
+                sender,
+                offer,
+                mine=False,
+                local_path=file_path,
+                state="Downloaded",
+            )
         if status["status"] not in {"sent", "received", "failed", "unknown"}:
             Clock.schedule_once(lambda _dt: self._watch_transfer(transfer_id), 0.5)
 
@@ -700,6 +744,28 @@ class ChatScreen(MDScreen):
             wrapped = textwrap.wrap(source_line, width=30, break_long_words=True, replace_whitespace=False)
             lines.extend(wrapped or [""])
         return "\n".join(lines)
+
+    def _file_display_name(self, offer: dict[str, Any]) -> str:
+        """Return the user-facing file name for an offer."""
+        return str(offer.get("original_file_name") or offer.get("file_name") or "file")
+
+    def _file_card_meta(self, offer: dict[str, Any], state: str) -> str:
+        """Build compact metadata for a file card."""
+        size = int(offer.get("file_size") or 0)
+        if size >= 1024 * 1024:
+            size_text = f"{size / (1024 * 1024):.1f} MB"
+        elif size >= 1024:
+            size_text = f"{size / 1024:.1f} KB"
+        else:
+            size_text = f"{size} B"
+        prefix = f"{state} - " if state else ""
+        return f"{prefix}{size_text}"
+
+    def _is_image_file(self, path_or_name: str, offer: dict[str, Any]) -> bool:
+        """Return whether an attachment is likely displayable as an image."""
+        file_type = str(offer.get("file_type") or "").lower()
+        suffix = Path(path_or_name).suffix.lower()
+        return file_type.startswith("image/") or suffix in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 
     def _message_meta(self, message: dict[str, Any] | None, mine: bool) -> str:
         """Build compact timestamp and delivery metadata for a bubble."""
