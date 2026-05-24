@@ -11,3 +11,5 @@ services:
         value: 0.0.0.0
       - key: MAVI_DB
         value: /opt/render/project/src/mavi.sqlite3
+      - key: PYTHON_VERSION
+        value: 3.11.9
