@@ -447,7 +447,11 @@ async def chat_ws(websocket: WebSocket, token: str) -> None:
     connections.setdefault(user_id, set()).add(websocket)
     try:
         while True:
-            await websocket.receive_json()
+            payload = await websocket.receive_json()
+            event = str(payload.get("event", ""))
+            peer_id = payload.get("peer_id")
+            if event in {"webrtc_offer", "webrtc_answer", "webrtc_ice"} and peer_id:
+                await broadcast(int(peer_id), {**payload, "from_user_id": user_id})
     except WebSocketDisconnect:
         connections.get(user_id, set()).discard(websocket)
 

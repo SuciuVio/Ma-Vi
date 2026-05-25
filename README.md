@@ -40,9 +40,9 @@ The new direction is Flutter + FastAPI + SQLite:
   of using peer-to-peer file paths.
 - Uploaded attachment files are temporary. `MAVI_ATTACHMENT_TTL_DAYS` controls
   how many days they remain available before server cleanup removes them.
-- Audio call signaling is available through the FastAPI/WebSocket backend. The
-  current Flutter UI supports call, answer, decline, end, and mute controls;
-  microphone media transport will be added with WebRTC in a later step.
+- Audio calls use FastAPI/WebSocket signaling plus Flutter WebRTC audio media.
+  The current build uses public STUN servers for discovery; some mobile
+  networks may still require a TURN relay in a later step.
 
 ## Android Build
 

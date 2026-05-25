@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -23,9 +24,13 @@ class _ChatScreenState extends State<ChatScreen> {
   final _api = MaviApi();
   final _message = TextEditingController();
   WebSocketChannel? _socket;
+  RTCPeerConnection? _peerConnection;
+  MediaStream? _localStream;
+  MediaStream? _remoteStream;
   List<MaviMessage> _messages = [];
   String _status = '';
   int? _callId;
+  int? _pendingAnswerCallId;
   bool _callMuted = false;
   String _callStatus = '';
 
@@ -39,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _socket?.sink.close();
+    _disposeWebRtc();
     _message.dispose();
     super.dispose();
   }
@@ -128,6 +134,12 @@ class _ChatScreenState extends State<ChatScreen> {
         _clearCall(event == 'call_rejected' ? 'Call rejected' : 'Call ended');
       } else if (event == 'call_muted') {
         setState(() => _callStatus = 'Call updated');
+      } else if (event == 'webrtc_offer') {
+        _handleWebRtcOffer(data);
+      } else if (event == 'webrtc_answer') {
+        _handleWebRtcAnswer(data);
+      } else if (event == 'webrtc_ice') {
+        _handleWebRtcIce(data);
       }
     }, onError: (_) {
       if (mounted) setState(() => _status = 'Realtime disconnected');
@@ -180,6 +192,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _callId = call['id'] as int;
         _callStatus = 'Ringing...';
       });
+      await _startWebRtcOffer(int.parse('${call['id']}'));
     } catch (error) {
       setState(() => _status = 'Call failed: $error');
     }
@@ -189,6 +202,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final callId = _callId;
     if (callId == null) return;
     await _api.respondCall(widget.token, callId, true);
+    await _acceptWebRtcCall(callId);
     if (!mounted) return;
     setState(() {
       _callStatus = 'Audio call active';
@@ -207,6 +221,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final callId = _callId;
     if (callId == null) return;
     await _api.endCall(widget.token, callId);
+    await _disposeWebRtc();
     if (!mounted) return;
     _clearCall('Call ended');
   }
@@ -216,6 +231,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (callId == null) return;
     final muted = !_callMuted;
     await _api.muteCall(widget.token, callId, muted);
+    _setLocalMute(muted);
     if (!mounted) return;
     setState(() {
       _callMuted = muted;
@@ -249,6 +265,131 @@ class _ChatScreenState extends State<ChatScreen> {
       _callStatus = '';
       _status = status;
     });
+    _disposeWebRtc();
+  }
+
+  Future<RTCPeerConnection> _ensurePeerConnection() async {
+    if (_peerConnection != null) return _peerConnection!;
+    final config = {
+      'iceServers': [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun1.l.google.com:19302'},
+      ],
+    };
+    final pc = await createPeerConnection(config);
+    _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+    for (final track in _localStream!.getTracks()) {
+      await pc.addTrack(track, _localStream!);
+    }
+    pc.onIceCandidate = (candidate) {
+      if (candidate.candidate == null) return;
+      _sendSignal({
+        'event': 'webrtc_ice',
+        'peer_id': widget.peer.id,
+        'call_id': _callId,
+        'candidate': candidate.toMap(),
+      });
+    };
+    pc.onTrack = (event) {
+      if (event.streams.isNotEmpty) {
+        _remoteStream = event.streams.first;
+        setState(() => _callStatus = 'Audio connected');
+      }
+    };
+    _peerConnection = pc;
+    return pc;
+  }
+
+  Future<void> _startWebRtcOffer(int callId) async {
+    final pc = await _ensurePeerConnection();
+    final offer = await pc.createOffer({'offerToReceiveAudio': true, 'offerToReceiveVideo': false});
+    await pc.setLocalDescription(offer);
+    _sendSignal({
+      'event': 'webrtc_offer',
+      'peer_id': widget.peer.id,
+      'call_id': callId,
+      'description': offer.toMap(),
+    });
+  }
+
+  Future<void> _acceptWebRtcCall(int callId) async {
+    final pc = await _ensurePeerConnection();
+    final remote = await pc.getRemoteDescription();
+    if (remote == null) {
+      _pendingAnswerCallId = callId;
+      return;
+    }
+    _pendingAnswerCallId = null;
+    final answer = await pc.createAnswer({'offerToReceiveAudio': true, 'offerToReceiveVideo': false});
+    await pc.setLocalDescription(answer);
+    _sendSignal({
+      'event': 'webrtc_answer',
+      'peer_id': widget.peer.id,
+      'call_id': callId,
+      'description': answer.toMap(),
+    });
+  }
+
+  Future<void> _handleWebRtcOffer(Map<String, dynamic> data) async {
+    final callId = data['call_id'];
+    if (callId != null) setState(() => _callId = int.parse('$callId'));
+    final description = data['description'] as Map<String, dynamic>?;
+    if (description == null) return;
+    final pc = await _ensurePeerConnection();
+    await pc.setRemoteDescription(RTCSessionDescription(description['sdp'] as String?, description['type'] as String?));
+    final pendingAnswer = _pendingAnswerCallId;
+    if (pendingAnswer != null) {
+      await _acceptWebRtcCall(pendingAnswer);
+    }
+  }
+
+  Future<void> _handleWebRtcAnswer(Map<String, dynamic> data) async {
+    final description = data['description'] as Map<String, dynamic>?;
+    if (description == null || _peerConnection == null) return;
+    await _peerConnection!.setRemoteDescription(RTCSessionDescription(description['sdp'] as String?, description['type'] as String?));
+    setState(() => _callStatus = 'Audio connected');
+  }
+
+  Future<void> _handleWebRtcIce(Map<String, dynamic> data) async {
+    final candidate = data['candidate'] as Map<String, dynamic>?;
+    if (candidate == null || _peerConnection == null) return;
+    await _peerConnection!.addCandidate(
+      RTCIceCandidate(
+        candidate['candidate'] as String?,
+        candidate['sdpMid'] as String?,
+        candidate['sdpMLineIndex'] as int?,
+      ),
+    );
+  }
+
+  void _sendSignal(Map<String, dynamic> payload) {
+    _socket?.sink.add(jsonEncode(payload));
+  }
+
+  void _setLocalMute(bool muted) {
+    final stream = _localStream;
+    if (stream == null) return;
+    for (final track in stream.getAudioTracks()) {
+      track.enabled = !muted;
+    }
+  }
+
+  Future<void> _disposeWebRtc() async {
+    final local = _localStream;
+    final remote = _remoteStream;
+    _localStream = null;
+    _remoteStream = null;
+    _pendingAnswerCallId = null;
+    for (final track in local?.getTracks() ?? <MediaStreamTrack>[]) {
+      await track.stop();
+    }
+    for (final track in remote?.getTracks() ?? <MediaStreamTrack>[]) {
+      await track.stop();
+    }
+    await local?.dispose();
+    await remote?.dispose();
+    await _peerConnection?.close();
+    _peerConnection = null;
   }
 
   bool _isImageName(String name) {

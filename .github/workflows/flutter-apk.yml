@@ -53,9 +53,20 @@ jobs:
               sed -i -E 's/compileSdkVersion[[:space:]]+flutter\.compileSdkVersion/compileSdkVersion 36/g' "$file"
               sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/g' "$file"
               sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' "$file"
+              sed -i -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' "$file"
+              sed -i -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' "$file"
             fi
           done
           grep -R "compileSdk" -n android
+
+      - name: Add Android audio permissions
+        working-directory: mobile_flutter
+        run: |
+          manifest="android/app/src/main/AndroidManifest.xml"
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.RECORD_AUDIO" />' "$manifest"
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' "$manifest"
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />' "$manifest"
+          cat "$manifest"
 
       - name: Install Flutter dependencies
         working-directory: mobile_flutter
@@ -69,6 +80,8 @@ jobs:
             sed -i -E 's/compileSdkVersion[[:space:]]+flutter\.compileSdkVersion/compileSdkVersion 36/g' "$file"
             sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/g' "$file"
             sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' "$file"
+            sed -i -E 's/minSdk[[:space:]]*=[[:space:]]*flutter\.minSdkVersion/minSdk = 23/g' "$file"
+            sed -i -E 's/minSdkVersion[[:space:]]+flutter\.minSdkVersion/minSdkVersion 23/g' "$file"
           done
           grep -R "compileSdk" -n "${PUB_CACHE:-$HOME/.pub-cache}/hosted" | head -80
 
