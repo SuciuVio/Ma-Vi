@@ -63,9 +63,12 @@ jobs:
         working-directory: mobile_flutter
         run: |
           manifest="android/app/src/main/AndroidManifest.xml"
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$manifest"
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />' "$manifest"
           sed -i '/<application/i\    <uses-permission android:name="android.permission.RECORD_AUDIO" />' "$manifest"
           sed -i '/<application/i\    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' "$manifest"
-          sed -i '/<application/i\    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />' "$manifest"
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />' "$manifest"
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />' "$manifest"
           cat "$manifest"
 
       - name: Install Flutter dependencies

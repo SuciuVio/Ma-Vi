@@ -276,6 +276,10 @@ class _ChatScreenState extends State<ChatScreen> {
         {'urls': 'stun:stun1.l.google.com:19302'},
       ],
     };
+    if (Platform.isAndroid) {
+      await Helper.setAndroidAudioConfiguration(AndroidAudioConfiguration.communication);
+      await Helper.setSpeakerphoneOn(true);
+    }
     final pc = await createPeerConnection(config);
     _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
     for (final track in _localStream!.getTracks()) {
