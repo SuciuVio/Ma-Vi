@@ -32,6 +32,8 @@ class _ChatScreenState extends State<ChatScreen> {
   int? _callId;
   int? _pendingAnswerCallId;
   bool _callMuted = false;
+  bool _callOnHold = false;
+  bool _callSpeakerOn = true;
   String _callStatus = '';
 
   @override
@@ -64,7 +66,17 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
-          if (_callId != null) _CallBanner(status: _callStatus, muted: _callMuted, onEnd: _endCall, onMute: _toggleMute),
+          if (_callId != null)
+            _CallBanner(
+              status: _callStatus,
+              muted: _callMuted,
+              onHold: _callOnHold,
+              speakerOn: _callSpeakerOn,
+              onEnd: _endCall,
+              onMute: _toggleMute,
+              onHoldToggle: _toggleHold,
+              onSpeakerToggle: _toggleSpeaker,
+            ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
@@ -231,11 +243,30 @@ class _ChatScreenState extends State<ChatScreen> {
     if (callId == null) return;
     final muted = !_callMuted;
     await _api.muteCall(widget.token, callId, muted);
-    _setLocalMute(muted);
+    _callMuted = muted;
+    _applyLocalAudioState();
     if (!mounted) return;
     setState(() {
-      _callMuted = muted;
-      _callStatus = muted ? 'Muted' : 'Audio call active';
+      _callStatus = _currentCallStatus();
+    });
+  }
+
+  Future<void> _toggleHold() async {
+    _callOnHold = !_callOnHold;
+    _applyLocalAudioState();
+    if (!mounted) return;
+    setState(() => _callStatus = _currentCallStatus());
+  }
+
+  Future<void> _toggleSpeaker() async {
+    final speakerOn = !_callSpeakerOn;
+    if (Platform.isAndroid) {
+      await Helper.setSpeakerphoneOn(speakerOn);
+    }
+    if (!mounted) return;
+    setState(() {
+      _callSpeakerOn = speakerOn;
+      _callStatus = _currentCallStatus();
     });
   }
 
@@ -262,6 +293,8 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _callId = null;
       _callMuted = false;
+      _callOnHold = false;
+      _callSpeakerOn = true;
       _callStatus = '';
       _status = status;
     });
@@ -278,7 +311,7 @@ class _ChatScreenState extends State<ChatScreen> {
     };
     if (Platform.isAndroid) {
       await Helper.setAndroidAudioConfiguration(AndroidAudioConfiguration.communication);
-      await Helper.setSpeakerphoneOn(true);
+      await Helper.setSpeakerphoneOn(_callSpeakerOn);
     }
     final pc = await createPeerConnection(config);
     _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
@@ -370,12 +403,18 @@ class _ChatScreenState extends State<ChatScreen> {
     _socket?.sink.add(jsonEncode(payload));
   }
 
-  void _setLocalMute(bool muted) {
+  void _applyLocalAudioState() {
     final stream = _localStream;
     if (stream == null) return;
     for (final track in stream.getAudioTracks()) {
-      track.enabled = !muted;
+      track.enabled = !_callMuted && !_callOnHold;
     }
+  }
+
+  String _currentCallStatus() {
+    if (_callOnHold) return 'Call on hold';
+    if (_callMuted) return 'Muted';
+    return _callSpeakerOn ? 'Audio call active - speaker' : 'Audio call active';
   }
 
   Future<void> _disposeWebRtc() async {
@@ -403,25 +442,67 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class _CallBanner extends StatelessWidget {
-  const _CallBanner({required this.status, required this.muted, required this.onEnd, required this.onMute});
+  const _CallBanner({
+    required this.status,
+    required this.muted,
+    required this.onHold,
+    required this.speakerOn,
+    required this.onEnd,
+    required this.onMute,
+    required this.onHoldToggle,
+    required this.onSpeakerToggle,
+  });
 
   final String status;
   final bool muted;
+  final bool onHold;
+  final bool speakerOn;
   final VoidCallback onEnd;
   final VoidCallback onMute;
+  final VoidCallback onHoldToggle;
+  final VoidCallback onSpeakerToggle;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       color: const Color(0xFF12352F),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.call, size: 20),
-          const SizedBox(width: 8),
-          Expanded(child: Text(status)),
-          IconButton(onPressed: onMute, icon: Icon(muted ? Icons.mic_off : Icons.mic)),
-          IconButton.filledTonal(onPressed: onEnd, icon: const Icon(Icons.call_end)),
+          Row(
+            children: [
+              const Icon(Icons.call, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(status, overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton.filledTonal(
+                tooltip: muted ? 'Unmute' : 'Mute',
+                onPressed: onMute,
+                icon: Icon(muted ? Icons.mic_off : Icons.mic),
+              ),
+              IconButton.filledTonal(
+                tooltip: onHold ? 'Resume call' : 'Hold call',
+                onPressed: onHoldToggle,
+                icon: Icon(onHold ? Icons.play_arrow : Icons.pause),
+              ),
+              IconButton.filledTonal(
+                tooltip: speakerOn ? 'Speaker on' : 'Speaker off',
+                onPressed: onSpeakerToggle,
+                icon: Icon(speakerOn ? Icons.volume_up : Icons.volume_down),
+              ),
+              IconButton.filled(
+                tooltip: 'End call',
+                onPressed: onEnd,
+                icon: const Icon(Icons.call_end),
+              ),
+            ],
+          ),
         ],
       ),
     );
